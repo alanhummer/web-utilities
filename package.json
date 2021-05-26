@@ -1,0 +1,21 @@
+{
+    "name": "le-utility-service",
+    "version": "1.0.0",
+    "private": true,
+    "main": "utility-app.js",
+    "scripts": {
+      "start": "node utility-app.js"
+    },
+    "dependencies": {
+        "express": "^*.*.*",
+        "body-parser": "^*.*.*",
+        "querystring": "^*.*.*",
+        "http": "^*.*.*",
+        "https": "^*.*.*",
+        "url": "^*.*.*",
+        "nodemailer": "^*.*.*",
+        "fs": "^*.*.*"
+    }
+    
+
+}
