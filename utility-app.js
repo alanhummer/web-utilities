@@ -93,7 +93,44 @@ app.get('/test', async function(req, res) {
 function actionTest(req, res) {
     //End point for testing this
     console.log("Doing Test Transaction");
-    res.send('Test Completed Successfully - Version: ' + appVersion + ' app listening at http://<domain>:' + port + " Time: " + TimeStamp(Date())); 
+
+    //Here get a file, usually used for configuration files in Alvis Time
+    try {
+        var url_parts = url.parse(req.url, true);
+        var query = url_parts.query;
+        if (query) {
+            var delay = query.delay;
+            if (delay) {
+                //first lets delay
+                sleep(delay);
+            }
+            var statuscode = query.statuscode;
+            if (statuscode) {
+
+                var filePath = "OrgKeys/" + statuscode + ".htm";
+
+                //And now get the file
+                fs.readFile(filePath, 'utf8' , (err, data) => {
+                    if (err) {
+                        res.send(err);
+                        return;
+                    }
+                    //We got it
+                    console.log("Got file: " + filePath);
+                    res.status(statuscode).send(data);
+                });
+            }
+            else {
+                res.send('Test Completed Successfully - Version: ' + appVersion + ' app listening at http://<domain>:' + port + " Time: " + TimeStamp(Date())); 
+            }
+        }
+        else {
+            res.send('Test Completed Successfully - Version: ' + appVersion + ' app listening at http://<domain>:' + port + " Time: " + TimeStamp(Date())); 
+        }
+    } catch (err) {
+      console.error(err);
+      res.send(err);
+    }  
 }
 
 //Handler to send emails
