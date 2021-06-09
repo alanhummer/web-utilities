@@ -101,6 +101,10 @@ function actionTest(req, res) {
         if (query) {
             var delay = query.delay;
             if (delay) {
+                //make sure not too big
+                if (delay > 30000) {
+                    delay = 30000;
+                }
                 //first lets delay
                 sleep(delay);
             }
