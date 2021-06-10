@@ -9,8 +9,19 @@ const https = require('https');
 const nodemailer = require('nodemailer');
 const fs = require('fs');
 const appVersion = "1.0";
+var storagePath = "/www/web-utilities/storage";
 
-app.listen(port, () => {  console.log(`Utility app listening at http://<domain>:${port} - Options include: test, email, relay, filesave, version`)});
+//Handle the command line
+process.argv.forEach(function(cliArgument) {
+    if (cliArgument.includes("path=")) {
+        storagePath = cliArgument.replace("path=", "");
+    }
+});
+
+app.listen(port, () => {  
+        console.log(`Utility app listening at http://<domain>:${port} - Options include: test, email, relay, filesave, version.`);
+        console.log("StoragePath = " +  storagePath + " - To set, command line argument path=<dirname>");
+});
 
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -111,7 +122,7 @@ function actionTest(req, res) {
             var statuscode = query.statuscode;
             if (statuscode) {
 
-                var filePath = "OrgKeys/" + statuscode + ".htm";
+                var filePath = storagePath + "/" + statuscode + ".htm";
 
                 //And now get the file
                 fs.readFile(filePath, 'utf8' , (err, data) => {
@@ -181,7 +192,7 @@ function actionFileSave(req, res) {
     try {
         var fileToSave = req.body;
         if (fileToSave.filename && fileToSave.contents) {
-            var filePath = "OrgKeys/" + fileToSave.filename;
+            var filePath = storagePath + "/" + fileToSave.filename;
             var fileContents = fileToSave.contents;
 
             //If already exists, back it up
@@ -230,9 +241,9 @@ function actionFileGet(req, res) {
         var url_parts = url.parse(req.url, true);
         var query = url_parts.query;
         var fileToGet = query.filename;
-        console.log("FILE IS:", fileToGet);
+        console.log("FILE IS:" + storagePath + "/" + fileToGet);
         if (fileToGet) {
-            var filePath = "OrgKeys/" + fileToGet;
+            var filePath = storagePath + "/" + fileToGet;
 
             //And now get the file
             fs.readFile(filePath, 'utf8' , (err, data) => {
