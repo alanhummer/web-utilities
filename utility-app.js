@@ -127,7 +127,7 @@ function actionTest(req, res) {
                 //And now get the file
                 fs.readFile(filePath, 'utf8' , (err, data) => {
                     if (err) {
-                        res.send(err);
+                        res.status(statuscode).send("<html><head><title>" + statuscode + " HTTP Status Error</title></head><body><center><h1>" + statuscode + " HTTP Status Error</h1></center></body></html>");
                         return;
                     }
                     //We got it
