@@ -1,3 +1,10 @@
+//Handle all unhandled exceptions on the node runtime, so that they don't tatally kill the web app
+process.on('uncaughtException', (err, origin) => {
+    console.log("ERROR - UNHANDED EXCEPTION CAUGHT: ", err);
+    console.error(err);
+    res.send(err);
+});
+
 const express = require('express');
 const app = express();
 const bodyParser = require('body-parser');
@@ -10,6 +17,7 @@ const nodemailer = require('nodemailer');
 const fs = require('fs');
 const appVersion = "1.0";
 var storagePath = "/www/web-utilities/storage";
+var totalRequestCount = 0;
 
 //Handle the command line
 process.argv.forEach(function(cliArgument) {
@@ -23,9 +31,22 @@ app.listen(port, () => {
         console.log("StoragePath = " +  storagePath + " - To set, command line argument path=<dirname>");
 });
 
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.urlencoded({ extended: true}));
 
-app.get('/utility', (req, res) => {
+//Lets count our requests
+app.use(async function incrementRequestCount(req, res, nextFunction) {
+
+    totalRequestCount = totalRequestCount + 1;
+    var start = process.hrtime.bigint();
+    await nextFunction();
+    var end = process.hrtime.bigint();
+    var diff = (end - start);
+    diff = Number(diff) / 100000;
+    //console.log("REQ #: " + totalRequestCount + " TOOK: " + diff + " AT:" + new Date().toISOString());
+
+});
+
+app.get('/utility', async (req, res) => {
 
     //Process based off of action
     var url_parts = url.parse(req.url, true);
@@ -33,21 +54,21 @@ app.get('/utility', (req, res) => {
     var action = query.action;
     switch (action) {
         case "fileget":
-            actionFileGet(req, res);
+            await actionFileGet(req, res);
             break;
         case "relay":
-            actionRelay(req, res);
+            await actionRelay(req, res);
             break;
         case "version":
-            actionVersion(req, res);
+            await actionVersion(req, res);
             break;
         default:
-            actionTest(req, res);
+            await actionTest(req, res);
             break;
     };
 });
 
-app.post('/utility', (req, res) => {
+app.post('/utility', async (req, res) => {
 
     //Process based off of action
     var url_parts = url.parse(req.url, true);
@@ -55,53 +76,53 @@ app.post('/utility', (req, res) => {
     var action = query.action;
     switch (action) {
         case "filesave":
-            actionFileSave(req, res);
+            await actionFileSave(req, res);
             break;
         case "email":
-            actionEmail(req, res);
+            await  actionEmail(req, res);
             break;
         default:
-            actionTest(req, res);
+            await actionTest(req, res);
             break;
     };
 });
 
-app.post('/filesave', (req, res) => {
+app.post('/filesave', async (req, res) => {
 
     //The filesave handler
-    actionFileSave(req, res);
+    await actionFileSave(req, res);
 
 })
 
-app.get('/fileget', (req, res) => {
+app.get('/fileget', async (req, res) => {
      //Get file contents from handler
-     actionFileGet(req, res);
+     await actionFileGet(req, res);
 })
 
-app.get('/version', (req, res) => {
+app.get('/version', async (req, res) => {
      //Get all the version info from handler
-     actionVersion(req, res);
+     await actionVersion(req, res);
 })
 
-app.post('/email', (req, res) => {
+app.post('/email', async (req, res) => {
      //Send it to the Email handler
-     actionEmail(req, res);
+     await actionEmail(req, res);
 })
 
   //Recieve relay call
 app.get('/relay', async function(req, res) {
      //Relay request to handler
-     actionRelay(req, res);
+     await actionRelay(req, res);
 });
 
 //Recieve test call
 app.get('/test', async function(req, res) {
     //Test handler - it's live
-    actionTest(req, res);
+    await actionTest(req, res);
 });
 
 //Handler for test transaction
-function actionTest(req, res) {
+async function actionTest(req, res) {
     //End point for testing this
     console.log("Doing Test Transaction");
 
@@ -112,28 +133,30 @@ function actionTest(req, res) {
         if (query) {
             var delay = query.delay;
             if (delay) {
+                delay = firstNumbers(delay);
                 //make sure not too big
                 if (delay > 30000) {
                     delay = 30000;
                 }
                 //first lets delay
-                sleep(delay);
+                await sleep(delay);
             }
             var statuscode = query.statuscode;
             if (statuscode) {
-
+                statuscode = firstNumbers(statuscode);
                 var filePath = storagePath + "/" + statuscode + ".htm";
 
                 //And now get the file
-                fs.readFile(filePath, 'utf8' , (err, data) => {
-                    if (err) {
-                        res.status(statuscode).send("<html><head><title>" + statuscode + " HTTP Status Error</title></head><body><center><h1>" + statuscode + " HTTP Status Error</h1></center></body></html>");
-                        return;
-                    }
+                try {
+                    var data = await fs.promises.readFile(filePath, 'utf8');
                     //We got it
                     console.log("Got file: " + filePath);
                     res.status(statuscode).send(data);
-                });
+                }
+                catch (fileErr) {
+                    res.status(statuscode).send("<html><head><title>" + statuscode + " HTTP Status Error</title></head><body><center><h1>" + statuscode + " HTTP Status Error</h1></center></body></html>");
+                    return;
+                }
             }
             else {
                 res.send('Test Completed Successfully - Version: ' + appVersion + ' app listening at http://<domain>:' + port + " Time: " + TimeStamp(Date())); 
@@ -149,7 +172,7 @@ function actionTest(req, res) {
 }
 
 //Handler to send emails
-function actionEmail(req, res) {
+async function actionEmail(req, res) {
 
     //Send out email - acting as an HTTP --> SMTP email relay
     var emailToSend = req.body;
@@ -186,7 +209,7 @@ function actionEmail(req, res) {
 }
 
 //Handler to save off files
-function actionFileSave(req, res) {
+async function actionFileSave(req, res) {
 
     //Here save off a file, usually used for configuration files in Alvis Timeff
     try {
@@ -234,7 +257,7 @@ function actionFileSave(req, res) {
 }
 
 //Handler to get a file and deliver contents
-function actionFileGet(req, res) {
+async function actionFileGet(req, res) {
 
     //Here get a file, usually used for configuration files in Alvis Time
     try {
@@ -266,14 +289,14 @@ function actionFileGet(req, res) {
 }
 
 //Handler to get version
-function actionVersion(req, res) {
+async function actionVersion(req, res) {
     //Here we fire off requests to get all of the version information for the requesting domain
     var url_parts = url.parse(req.url, true);
     var query = url_parts.query;
     if (query) {
         if (query.domain) {
             //OK, here we go - this will process the request
-            getWebSiteInfo(query.domain, res);
+            await getWebSiteInfo(query.domain, res);
         }
         else {
             res.send("Invalid Domain");
@@ -285,7 +308,7 @@ function actionVersion(req, res) {
 }
 
 //Handler to relaty HTTP requests
-function actionRelay(req, res) {
+async function actionRelay(req, res) {
 
     //Relay handler - acts like a proxy - will relay requests and pass back results
     var url_parts = url.parse(req.url, true);
@@ -293,16 +316,14 @@ function actionRelay(req, res) {
     if (query) {
         if (query.relayURI) {
             //Get the page/response and pass response object to send it
-            getPage(query.relayURI, res, "return-page", null, null, null);
+            await getPage(query.relayURI, res, "return-page", null, null, null);
         }
     }   
 }
 
 //HTTP call for loading a page
-function getPage(myURL, responseObject, action, actionObject, actionObjects, inputCookie) {
+async function getPage(myURL, responseObject, action, actionObject, actionObjects, inputCookie) {
 
-    var sleepCount = 0;
-    var blnDone = false;
     var responseString = "Not Loaded"; 
     var options = {
         hostname: "",
@@ -333,10 +354,10 @@ function getPage(myURL, responseObject, action, actionObject, actionObjects, inp
         });
     
         //the whole response has been received, so we just print it out here
-        response.on('end', function () {
+        response.on('end', async function () {
             if (response.statusCode == 302 || response.statusCode == 301) {
                 //Handle the redirect
-                getPage(response.headers.location, responseObject, action, actionObject, actionObjects, response.headers["set-cookie"]);
+               await getPage(response.headers.location, responseObject, action, actionObject, actionObjects, response.headers["set-cookie"]);
             }
             else 
             {
@@ -354,7 +375,7 @@ function getPage(myURL, responseObject, action, actionObject, actionObjects, inp
                         actionObject.value = getVersion(responseString);
                         actionObject.done = true;
                         if (allDone(actionObjects)) {
-                            buildAndSendVersionInfo(responseObject, actionObjects);
+                            await buildAndSendVersionInfo(responseObject, actionObjects);
                         }
                     }
                 }
@@ -416,7 +437,7 @@ function parseURL(inputURL, options) {
 }
 
 //Get all of the version info for the domain
-function getWebSiteInfo(domain, responseObject) {
+async function getWebSiteInfo(domain, responseObject) {
 
     //This is matrics of versions and their values and URLs
     var versions = [
@@ -443,7 +464,7 @@ function getWebSiteInfo(domain, responseObject) {
     ]
 
     //For each entry, go get em
-	versions.forEach(function(versionToGet) {
+	versions.forEach(async function(versionToGet) {
         if (!versionToGet.done) {
             if (versionToGet.url != "") {
 
@@ -451,8 +472,7 @@ function getWebSiteInfo(domain, responseObject) {
                 versionToGet.url = versionToGet.url.replace("_DOMAIN_", domain);
 
                 //Get the page/response and pass response object to send it
-                getPage(versionToGet.url, responseObject, "version", versionToGet, versions, null);
-            
+                await getPage(versionToGet.url, responseObject, "version", versionToGet, versions, null);
             }   
             else {
                 versionToGet.done = true;
@@ -567,7 +587,7 @@ function appendVersion(inputFullVersion, inputVersion) {
 }
 	
 //Sleep function, like what every other language has
-function sleep(inputMS) {
+/*function sleep(inputMS) {
     let timeStart = new Date().getTime(); 
     while (true) { 
         let elapsedTime = new Date().getTime() - timeStart; 
@@ -575,6 +595,9 @@ function sleep(inputMS) {
         break; 
         } 
     } 
+}*/
+function sleep(inputMS) {
+    return new Promise(resolve => setTimeout(resolve, inputMS));
 }
 
 //Build the output for the version request
@@ -657,4 +680,18 @@ function TimeStamp(inputDate) {
         lSecond = '0' + lSecond;
     }
     return (lYear + "-" + lMonth + "-" + lDay + "-" + lHour + "-" + lMinute + "-" + lSecond);
+}
+
+//Grab only the first numbers of a stirng
+function firstNumbers(inputString) {
+
+    var myResult = inputString.match(/(^\d+)/);
+
+    if (myResult[1]) {
+        return Number(myResult[1]);
+    }
+    else {
+        return 0;
+    }
+
 }
