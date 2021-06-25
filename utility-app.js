@@ -331,6 +331,7 @@ async function getPage(myURL, responseObject, action, actionObject, actionObject
         path: "",
         method: '',
         protocol: "",
+        timeout: 4000,
         headers: {
             'Accept': '*/*',
             'Accept-Language': 'en-US,en;q=0.8',
@@ -380,16 +381,40 @@ async function getPage(myURL, responseObject, action, actionObject, actionObject
                     }
                 }
             }
-
         });
     }
     if (options.protocol == "https:") {
-        https.request(options, callback).end();
+        var request =  https.request(options, callback);
     }
     else {
-        http.request(options, callback).end();
+        var request =  http.request(options, callback);
     }
 
+    request.on('timeout', () => {
+        request.destroy();
+    });
+
+    request.on('error', () => {
+
+        if (action == "return-page") {
+            responseObject.send("Error: Timed out getting " + myURL + " - it took over " +  options.timeout + "ms");
+        }
+        else {
+            if (action == "version") {
+                actionObject.value = "Error: Timed out getting " + myURL + " - it took over " +  options.timeout + "ms";
+                actionObject.done = true;
+                if (allDone(actionObjects)) {
+                    buildAndSendVersionInfo(responseObject, actionObjects);
+                }
+            }
+            else {
+                responseObject.status(408);
+                responseObject.send("Error: Timed out - took over " +  options.timeout);
+            }
+        }
+    });
+
+    request.end();
 }
 
 //Splits up the URL to pull out our fields
@@ -459,7 +484,9 @@ async function getWebSiteInfo(domain, responseObject) {
         {"name": "ic_web_front_end_version_pmp", "value": "Getting....", "url": "https://_DOMAIN_/shop/mens-polo-shirts-tops/S-xfe-xez-y5b-yqm-xec?cm_re=lec-_-mns-_-global-_-glbnv-polo-shirts-_-20160316-_-txt", "done": false},
         {"name": "ic_web_front_end_version_basket", "value": "Getting....", "url": "https://_DOMAIN_/shopping-bag", "done": false},
         {"name": "ic_web_front_end_version_myaccount", "value": "Getting....", "url": "https://_DOMAIN_/co/account/login", "done": false},
-        {"name": "ic_cgi_new_tar_version", "value": "Coming....", "url": "", "done": true},
+        {"name": "ic_cgi_new_tar_version", "value": "Getting....", "url": "", "done": true},
+        {"name": "autocomplete-service", "value": "Getting....", "url": "https://_DOMAIN_/api/autocomplete/actuator/info", "done": false},
+        {"name": "search-service", "value": "Getting....", "url": "https://_DOMAIN_/api/search/actuator/info", "done": false},
         {"name": "http_status", "value": "Getting...", "url": "https://_DOMAIN_", "done": false}    
     ]
 
@@ -501,8 +528,8 @@ function getVersion(myPageData) {
         inputLine = myArray[i];
         if (inputLine.includes("git.")) {
             myVersion = inputLine.replace("''", "");
-            myVersion = inputLine.replace('""', "");
-			myVersion = inputLine.replace(",", "");
+            myVersion = myVersion.replace('""', "");
+			myVersion = myVersion.replace(",", "");
 			myVersion = myVersion.trim();
 			myFullVersion = appendVersion(myFullVersion, myVersion);
         }
@@ -558,6 +585,16 @@ function getVersion(myPageData) {
                                     myVersion = myVersion.replace(" -->", "");
                                     myVersion = myVersion.trim();
                                     myFullVersion = appendVersion(myFullVersion, myVersion);
+                                }
+                                else {
+                                    if (inputLine.includes("artifactId")) {
+                                        //We have artifactory object, hooray
+                                        myVersion = inputLine.replace("''", "");
+                                        myVersion = myVersion.replace('""', "");
+                                        myVersion = myVersion.replace(",", "");
+                                        myVersion = myVersion.trim();
+                                        myFullVersion = appendVersion(myFullVersion, myVersion);
+                                    }
                                 }
                             }
                         }
@@ -624,7 +661,9 @@ function buildAndSendVersionInfo(responseObject, actionObjects) {
     '  "ic_web_front_end_version_pmp": "_ic_web_front_end_version_pmp_",' +
     '  "ic_web_front_end_version_basket": "_ic_web_front_end_version_basket_",' +
     '  "ic_web_front_end_version_myaccount": "_ic_web_front_end_version_myaccount_",' +
-    '  "ic_cgi_new_tar_version": "Coming....",' +
+    '  "autocomplete-service": _autocomplete-service_,' +
+    '  "search-service": _search-service_,' +
+    '  "ic_cgi_new_tar_version": "_ic_cgi_new_tar_version_",' +
     '  "http_status": ""' +
     '}}';
 
